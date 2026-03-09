@@ -1,0 +1,27 @@
+name: Build BL1 2GB
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Install ARM Toolchain and Python
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-arm-none-eabi python3
+
+    - name: Compile and Pack BL1
+      # 这里的 CROSS_COMPILE 需要根据你 config.mak 里的变量名调整
+      # 如果默认是 arm-linux-gnueabi-，直接让它用 ubuntu 自带的 arm-none-eabi-
+      run: |
+        make CROSS_COMPILE=arm-none-eabi-
+
+    - name: Upload bl1-mmcboot.bin Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: bl1-mmcboot-2GB
+        path: bl1-mmcboot.bin
