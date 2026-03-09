@@ -9,16 +9,14 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v3
 
-    - name: Install ARM Toolchain and Python
+    - name: Install AArch64 Toolchain and Python
       run: |
         sudo apt-get update
-        sudo apt-get install -y gcc-arm-none-eabi python3
+        sudo apt-get install -y gcc-aarch64-linux-gnu python3
 
     - name: Compile and Pack BL1
-      # 这里的 CROSS_COMPILE 需要根据你 config.mak 里的变量名调整
-      # 如果默认是 arm-linux-gnueabi-，直接让它用 ubuntu 自带的 arm-none-eabi-
       run: |
-        make CROSS_COMPILE=arm-none-eabi-
+        make
 
     - name: Upload bl1-mmcboot.bin Artifact
       uses: actions/upload-artifact@v3
