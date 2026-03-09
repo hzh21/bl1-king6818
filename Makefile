@@ -104,6 +104,9 @@ link:
 bin:
 	@echo [binary.... $(DIR_TARGETOUTPUT)/$(TARGET_NAME).bin]
 	$(Q)$(MAKEBIN) -O binary $(DIR_TARGETOUTPUT)/$(TARGET_NAME).elf $(DIR_TARGETOUTPUT)/$(TARGET_NAME).bin
+	@echo [Packing NSIH Header.... bl1-mmcboot.bin]
+	$(Q)python3 pack_nsih.py nsih_2g.txt $(DIR_TARGETOUTPUT)/$(TARGET_NAME).bin bl1-mmcboot.bin
+
 ifeq ($(OS),Windows_NT)
 	@if exist $(DIR_OBJOUTPUT)			\
 		@$(RM) $(DIR_OBJOUTPUT)\buildinfo.o
