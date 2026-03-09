@@ -287,8 +287,8 @@ const struct NX_TZPC_PROT_BIT Prot_bit[NX_TZPC_MODULE_NUMBER * NX_TZPC_PORT] = {
     },
     //=============TZPC6=================
     {
-     NX_TZPC_SMODE_SECURE, // DREX
-     NX_TZPC_SMODE_SECURE, // DDRPHY
+     NX_TZPC_SMODE_NONSECURE, // DREX
+     NX_TZPC_SMODE_NONSECURE, // DDRPHY
      NX_TZPC_SMODE_SECURE, // NC
      NX_TZPC_SMODE_SECURE, // NC
      NX_TZPC_SMODE_SECURE, // NC
@@ -366,40 +366,29 @@ static inline void SetTZASC(void)
 	struct NX_TZC380_RegisterSet *const pTZC380 =
 	    (struct NX_TZC380_RegisterSet *)PHY_BASEADDR_DREX_TZ_MODULE;
 
-	//	printf("address width %d, num of region:%d\r\n",
-	//((pTZC380->CONFIGURATION >>8)&0x3F)+1, (pTZC380->CONFIGURATION &
-	//0xF));
-	WriteIO32(&pTZC380->ACTION,
-		  NX_TZASC_REACTION_INTLOW_DECERR); // int low and DECERR
-						    // response so occur
-						    // exception
+	WriteIO32(&pTZC380->ACTION, NX_TZASC_REACTION_INTLOW_DECERR);
 
-	// region 0 is always cover all area to secure.
+	// ---------------------------------------------------------
+	// 核心突破：配置 Region 1，从 0x40000000 开始，大小 2GB，全权限放开！
+	// ---------------------------------------------------------
+	WriteIO32(&pTZC380->RS[1].REGION_SETUP_HIGH, 0);
+	WriteIO32(&pTZC380->RS[1].REGION_SETUP_LOW, 0x40000000); 
+	WriteIO32(&pTZC380->RS[1].REGION_ATTRIBUTES,
+		  ((0x0F << 28) | // 允许 Secure R/W 和 Non-Secure R/W (彻底放权)
+		   (0xFF << 8)  | // 启用所有的 8 个 Sub-region
+		   (0x1E << 1)  | // 0x1E = 2GB 容量 (TZC-380规范: 2^(30+1)=2GB)
+		   (0x01 << 0)    // 1 = 启用该 Region (打破原厂的 0x00 枷锁！)
+		   ));
+
+	// 清理并禁用其他多余的 Region (防止干扰)
 	j = (ReadIO32(&pTZC380->CONFIGURATION) & 0xF) + 1;
-	for (i = 1; i < j; i++) {
+	for (i = 2; i < j; i++) {
 		WriteIO32(&pTZC380->RS[i].REGION_SETUP_HIGH, 0);
-		WriteIO32(&pTZC380->RS[i].REGION_SETUP_LOW, 0); // x40000000;
-		WriteIO32(&pTZC380->RS[i].REGION_ATTRIBUTES,
-			  ((0x0F << 28) | // secure r/w, non-secure r/w
-			   (0xFF << 8) |  // sub region x is enabled
-			   (0x20 << 1) |  // 2GB region
-			   (0x00 << 0) // enable for region 0: disable, 1:enable
-			   ));
+		WriteIO32(&pTZC380->RS[i].REGION_SETUP_LOW, 0);
+		WriteIO32(&pTZC380->RS[i].REGION_ATTRIBUTES, 0);
 	}
 
-#if 0   // OP-TEE SHM
-	/* Set TZASC region 1 as secure DRAM (from 0x7E000000, size 32MB) */
-	WriteIO32(&pTZC380->RS[1].REGION_SETUP_HIGH, 0);
-	WriteIO32(&pTZC380->RS[1].REGION_SETUP_LOW, 0x7E000000); // x40000000;
-	WriteIO32(&pTZC380->RS[1].REGION_ATTRIBUTES,
-		  ((0x0C << 28) | // Only secure r/w
-		   (0x200 << 4) |  // 32MB region (0x200 * 64KB)
-		   (0x01 << 0) // enable for region
-			));
-#endif
-
-	WriteIO32(&pTZC380->SPECULATION_CONTROL,
-		  0); // 0: speculation is enabled. defalut
+	WriteIO32(&pTZC380->SPECULATION_CONTROL, 0);
 }
 
 static inline void SetGIC_Master(void)
