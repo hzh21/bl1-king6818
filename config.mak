@@ -158,7 +158,7 @@ ARLIBFLAGS			= -v -s
 
 ASFLAG				= -D__ASSEMBLY__ -D$(OPMODE)
 
-CFLAGS				+=	-g -Wall						\
+CFLAGS				+=	-g -Wall -fcommon				\
 					-Wextra -ffreestanding -fno-builtin	\
 					-mlittle-endian						\
 					-mcpu=$(CPU)						\
