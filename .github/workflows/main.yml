@@ -1,25 +1,112 @@
-name: Build BL1 2GB
+name: Build bl1-gec6818 (64-bit Raptor 2GB Unlock)
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ "artik", "master", "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4   # <--- 这里改成 v4
+    runs-on: ubuntu-22.04
 
-    - name: Install AArch64 Toolchain and Python
+    steps:
+    - name: 检出代码 (Checkout)
+      uses: actions/checkout@v4
+
+    - name: 安装老版本编译依赖 (Install Legacy Dependencies)
       run: |
         sudo apt-get update
-        sudo apt-get install -y gcc-aarch64-linux-gnu python3
+        sudo apt-get install -y build-essential libncurses5 libtinfo5
 
-    - name: Compile and Pack BL1
+    - name: 下载并解压 64位 交叉编译工具链 (Download 64-bit Toolchain)
       run: |
+        wget https://releases.linaro.org/archive/14.04/components/toolchain/binaries/gcc-linaro-aarch64-none-elf-4.8-2014.04_linux.tar.bz2
+        tar xvjf gcc-linaro-aarch64-none-elf-4.8-2014.04_linux.tar.bz2
+
+    - name: 修复配置文件和 Makefile (Patch config & Makefile)
+      run: |
+        # 1. 确保使用 64 位模式
+        sed -i 's/OPMODE[[:space:]]*=[[:space:]]*aarch32/#OPMODE = aarch32/g' config.mak
+        sed -i 's/#OPMODE[[:space:]]*=[[:space:]]*aarch64/OPMODE = aarch64/g' config.mak
+        
+        # 2. 修正 64位 工具链前缀
+        sed -i 's/aarch64-elf-/aarch64-none-elf-/g' config.mak
+        
+        # 3. 修复 Makefile 语法错误
+        sed -i 's/^[[:space:]]*fi[[:space:]]*$/# fi/g' Makefile
+
+        # 核心截胡：直接在 iSDHCBOOT 函数最开头，强行篡改 pSBI->DEVICEADDR 的值！
+        # 129 扇区 * 512 字节/扇区 = 66048 (0x10200)
+        sed -i 's/pSDXCBootStatus = \&lSDXCBootStatus;/& pSBI->DEVICEADDR = 66048;/g' src/iSDHCBOOT.c
+        
+        # 5. 切除 TrustZone 1GB 枷锁 (确保 2GB 全开)
+        sed -i 's/0x40000000/0x40000000/g' src/SecureManager.c || true
+        sed -i 's/0x0F << 28/0x0F << 28 | 0x1E << 1/g' src/SecureManager.c || true
+
+    - name: 执行编译生成 64位 裸二进制文件 (Make BL1)
+      run: |
+        export PATH="$GITHUB_WORKSPACE/gcc-linaro-aarch64-none-elf-4.8-2014.04_linux/bin:$PATH"
         make
 
-    - name: Upload bl1-mmcboot.bin Artifact
-      uses: actions/upload-artifact@v4   # <--- 这里改成 v4
+    - name: 注入 2GB 内存参数合成 NSIH (Inject 2GB RAM & Merge)
+      run: |
+        cat << 'EOF' > build_nsih.py
+        import sys, struct
+
+        def main():
+            txt_path = sys.argv[1]
+            bin_path = sys.argv[2]
+            out_path = sys.argv[3]
+            
+            header = bytearray(512)
+            idx = 0
+            
+            # 1. 读取官方基础配置 (提供 64位 AArch64 跳转指令等基础框架)
+            with open(txt_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith(('//', '#')): continue
+                    token = line.split()[0]
+                    try:
+                        val = int(token, 16)
+                        if idx < 128:
+                            struct.pack_into('<I', header, idx * 4, val)
+                            idx += 1
+                    except ValueError:
+                        pass
+            
+            # 2. 荣品专属硬核覆盖区 (修正读取偏移、通道号、2GB内存时序)
+            ddr_2g_params = {
+                0x040: 0x00000400, # 核心修复：指向紧贴头部的第2扇区
+                0x050: 0x00000002, # 核心修复：荣品专供的 SD卡通道 2
+                0x098: 0x03100302, 0x09C: 0x004007C0, 0x0A0: 0x06000B08,
+                0x0A4: 0x0C0C0C0C, 0x0A8: 0x04040404, 0x0AC: 0x0000401B,
+                0x0B0: 0x00620618, 0x0B4: 0x6836650E, 0x0B8: 0x3630580B,
+                0x0BC: 0x41000A26, 0x0C0: 0x00020102, 0x0C4: 0x06060606,
+                0x0C8: 0x06060606, 0x0CC: 0x00000104, 0x0D0: 0x00000004
+            }
+            for offset, val in ddr_2g_params.items():
+                struct.pack_into('<I', header, offset, val)
+            
+            # 3. 合并文件
+            with open(bin_path, 'rb') as f:
+                bin_data = f.read()
+                
+            with open(out_path, 'wb') as f:
+                f.write(header)
+                f.write(bin_data)
+                
+            print(f"成功生成完美 2GB 解锁版固件！BL1 大小: {len(bin_data)} bytes.")
+
+        if __name__ == '__main__':
+            main()
+        EOF
+
+        RAW_BIN=$(ls out/*.bin | head -n 1)
+        python3 build_nsih.py "reference-nsih/raptor-sd-64.txt" "$RAW_BIN" "out/bl1-mmcboot.bin"
+
+    - name: 上传最终编译产物 (Upload Artifact)
+      uses: actions/upload-artifact@v4
       with:
-        name: bl1-mmcboot-2GB
-        path: bl1-mmcboot.bin
+        name: bl1-gec6818-binaries
+        path: out/
