@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
-// Nexell System Infomation Header (Final 64-bit 2GB for Sector 1 - Channel 0)
+// Nexell System Infomation Header (For Rongpin Board to boot FriendlyARM U-Boot)
 //------------------------------------------------------------------------------
-// Vector Code Area (直接采用 raptor-sd-64 原厂纯正跳转代码)
+// Vector Code Area (AArch64 64位模式跳板)
 E3A00103	// 0x000 : MOV R0, #0xC0000000
 E3800A11	// 0x004 : ORR R0, R0, #0x11000
 E590113C	// 0x008 : LDR R1, [R0, #0x13C]
@@ -9,7 +9,7 @@ E3811A0F	// 0x00C : ORR R1, R1, #0xF000
 E580113C	// 0x010 : STR R1, [R0, #0x13C]
 E3A025FF	// 0x014 : MOV R2, #0x3FC00000
 E38229FF	// 0x018 : ORR R2, R2, #0x3FC000
-E3822080	// 0x01C : ORR R2, R2, #0x80		// 0xFFFF0200>>2
+E3822080	// 0x01C : ORR R2, R2, #0x80
 E5802140	// 0x020 : STR R2, [R0, #0x140]
 E3A08103	// 0x024 : MOV R8, #0xC0000000
 E3888801	// 0x028 : ORR R8, R8, #0x10000
@@ -22,13 +22,13 @@ EAFFFFFE	// 0x03C : B .
 //------------------------------------------------------------------------------
 // Main Bootloader Load Info
 //------------------------------------------------------------------------------
-00000200	// 0x040 : Device Read Address (核心修正！指向第1扇区，连带头部一起读)
-0000C000	// 0x044 : Load Size for 2ndboot. (48KB)
+00000400	// 0x040 : Device Read Address (偏移0x400，紧贴在头部后面)
+0000C000	// 0x044 : Load Size for 2ndboot.
 FFFF0000	// 0x048 : Load Address for 2ndboot.
 FFFF0000	// 0x04C : Launch Address for 2ndboot.
 
-00000000	// 0x050	[7:0] - Channel number (核心修正！必须是0，SD卡槽通道！)
-03000000	// 0x054	Boot From SDMMC
+00000002	// 0x050 : Channel number (必须是2！荣品SD卡硬件通道)
+03000000	// 0x054 : Boot From SDMMC
 00000000	// 0x058
 
 //------------------------------------------------------------------------------
@@ -51,7 +51,7 @@ FFFF0000	// 0x04C : Launch Address for 2ndboot.
 0000020B	// 0x094 : CCI4		PLL3	/CCI4BCLK:400	/CCI4PCLK:200
 
 //------------------------------------------------------------------------------
-// MCU-D registers (荣品 2GB 双 Bank)
+// MCU-D registers (荣品专属 2GB 参数)
 //------------------------------------------------------------------------------
 03100302	// 0x098	/Chip Num:2	/Chip Row:15	/Bus Width:16	/Chip Col:10
 004007C0	// 0x09C	/Mem size:(2^15)x(2^10)x8x16
