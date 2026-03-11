@@ -25,20 +25,18 @@ jobs:
 
     - name: 修复配置文件和 Makefile (Patch config & Makefile)
       run: |
-        # 1. 确保使用 64 位模式
-        sed -i 's/OPMODE[[:space:]]*=[[:space:]]*aarch32/#OPMODE = aarch32/g' config.mak
-        sed -i 's/#OPMODE[[:space:]]*=[[:space:]]*aarch64/OPMODE = aarch64/g' config.mak
+        # 强制指定 64 位模式
+        sed -i 's/OPMODE[[:space:]]*=[[:space:]]*aarch32/OPMODE = aarch64/g' config.mak
         
-        # 2. 修正 64位 工具链前缀
-        sed -i 's/aarch64-elf-/aarch64-none-elf-/g' config.mak
+        # 强行覆盖工具链前缀 (使用通配匹配，确保替换掉 aarch64-linux-gnu-)
+        sed -i 's/CROSS_TOOL[[:space:]]*=.*aarch64.*/CROSS_TOOL = aarch64-none-elf-/g' config.mak
         
-        # 3. 修复 Makefile 语法错误
-        sed -i 's/^[[:space:]]*fi[[:space:]]*$/# fi/g' Makefile
+        # 修正 Makefile 语法错误 (第 75 行多余的 fi)
+        sed -i '75s/fi/# fi/' Makefile
 
-        # 核心截胡：直接在 iSDHCBOOT 函数最开头，强行篡改 pSBI->DEVICEADDR 的值！
-        # 129 扇区 * 512 字节/扇区 = 66048 (0x10200)
-        sed -i 's/pSDXCBootStatus = \&lSDXCBootStatus;/& pSBI->DEVICEADDR = 66048;/g' src/iSDHCBOOT.c
-        
+        # 核心截胡：强制让 BL1 去 129 扇区寻找 3rdboot
+        # 注意：这个仓库可能使用 pSBI->DEVICEADDR，确保地址对齐
+        sed -i 's/pSDXCBootStatus = \&lSDXCBootStatus;/& pSBI->DEVICEADDR = 0x10200;/g' src/iSDHCBOOT.c
         # 5. 切除 TrustZone 1GB 枷锁 (确保 2GB 全开)
         sed -i 's/0x40000000/0x40000000/g' src/SecureManager.c || true
         sed -i 's/0x0F << 28/0x0F << 28 | 0x1E << 1/g' src/SecureManager.c || true
